@@ -1,0 +1,37 @@
+{
+	"__ver": "sys-pkg:3",
+	"_id": "IdmlQudBTJWAT0olgYIPuQ",
+	"allow_customize": false,
+	"key": "sys.dbui.perspective.default.DupeSpec",
+	"system": false,
+	"value": {
+		"edit": {
+			"layout": [
+				"class",
+				"fn",
+				"merge"
+			]
+		},
+		"list": {
+			"fields": [
+				"class"
+			]
+		},
+		"view": {
+			"layout": [
+				"class",
+				"fn",
+				"merge"
+			],
+			"recordActions": [
+				"edit",
+				"delete",
+				{
+					"icon": "fa-circle",
+					"label": "Perform Scan",
+					"ws": "dupehelper/scan"
+				}
+			]
+		}
+	}
+}

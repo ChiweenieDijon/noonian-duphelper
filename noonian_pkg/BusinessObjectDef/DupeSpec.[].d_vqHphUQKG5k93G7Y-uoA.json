@@ -1,0 +1,20 @@
+{
+	"__ver": "sys-pkg:2",
+	"_id": "d_vqHphUQKG5k93G7Y-uoA",
+	"abstract": false,
+	"class_name": "DupeSpec",
+	"definition": {
+		"class": {
+			"ref_class": "BusinessObjectDef",
+			"type": "reference"
+		},
+		"fn": {
+			"type": "function"
+		},
+		"merge": {
+			"type": "function"
+		}
+	},
+	"superclass": null,
+	"system": false
+}

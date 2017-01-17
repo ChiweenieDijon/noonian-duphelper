@@ -1,0 +1,39 @@
+{
+	"__ver": "sys-pkg:5",
+	"_id": "UCajhSqdRaK0MpHDDmOxXQ",
+	"allow_customize": false,
+	"key": "sys.dbui.perspective.default.DupeList",
+	"system": false,
+	"value": {
+		"edit": {
+			"layout": [
+				"dups",
+				"orig",
+				"spec"
+			]
+		},
+		"list": {
+			"fields": [
+				"spec",
+				"orig",
+				"dups"
+			]
+		},
+		"view": {
+			"layout": [
+				"dups",
+				"orig",
+				"spec"
+			],
+			"recordActions": [
+				"edit",
+				"delete",
+				{
+					"icon": "fa-circle",
+					"label": "Process List",
+					"ws": "dupehelper/process_dupe_list"
+				}
+			]
+		}
+	}
+}

@@ -1,0 +1,21 @@
+{
+	"__ver": "sys-pkg:1",
+	"_id": "4HAzS7aERKWG52VFbEK4Kw",
+	"abstract": false,
+	"class_name": "DupeList",
+	"definition": {
+		"dups": [
+			{
+				"type": "reference"
+			}
+		],
+		"orig": {
+			"type": "reference"
+		},
+		"spec": {
+			"ref_class": "DupeSpec",
+			"type": "reference"
+		}
+	},
+	"system": false
+}

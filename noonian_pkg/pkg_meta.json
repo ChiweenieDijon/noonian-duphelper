@@ -1,0 +1,33 @@
+{
+	"__ver": "af4e6d5e-6c73-4ce6-901f-4a894e8a8ea9:2|vianey:1",
+	"_id": "W7MD5GI_T9qKrsdU6tYSfw",
+	"key": "sys.duphelper",
+	"major_version": 0,
+	"manifest": {
+		"BusinessObjectDef": {
+			"4HAzS7aERKWG52VFbEK4Kw": "sys-pkg:1",
+			"d_vqHphUQKG5k93G7Y-uoA": "sys-pkg:2"
+		},
+		"CodeModule": {
+			"JLnSa13BQN6STX1RVLI3CQ": "sys-pkg:3"
+		},
+		"Config": {
+			"IdmlQudBTJWAT0olgYIPuQ": "sys-pkg:3",
+			"UCajhSqdRaK0MpHDDmOxXQ": "sys-pkg:5"
+		},
+		"LabelGroup": {
+			"2B7gVUfxQ7yIfPNUEPQ4wA": "sys-pkg:1",
+			"CajUxrMTQpqJOHg5Ud119g": "sys-pkg:1"
+		},
+		"UiAction": {
+			"A0AuhvTeSx2QFR0n0cgyTA": "sys-pkg:3"
+		},
+		"WebService": {
+			"MbLcge_QQIWbngibKw6h1Q": "sys-pkg:4",
+			"ZbtAWuaPSTybQBoMdOn9hg": "sys-pkg:4",
+			"g0sZRYM7TgSAP9o4uxbKoA": "sys-pkg:4"
+		}
+	},
+	"minor_version": 4,
+	"name": "Duplicate Helper"
+}

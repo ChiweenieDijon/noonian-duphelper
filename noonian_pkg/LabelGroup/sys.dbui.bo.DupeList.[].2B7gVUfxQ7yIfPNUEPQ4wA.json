@@ -1,0 +1,15 @@
+{
+	"__ver": "sys-pkg:1",
+	"_id": "2B7gVUfxQ7yIfPNUEPQ4wA",
+	"key": "sys.dbui.bo.DupeList",
+	"language": {
+		"_disp": "English",
+		"_id": "-9vPfv2lEeSFtiimx_V4dw",
+		"code": "en"
+	},
+	"value": {
+		"dups": "Dups",
+		"orig": "Orig",
+		"spec": "Spec"
+	}
+}
