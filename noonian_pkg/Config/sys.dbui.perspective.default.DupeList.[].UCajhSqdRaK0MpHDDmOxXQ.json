@@ -1,8 +1,10 @@
 {
-	"__ver": "sys-pkg:5",
+	"__ver": "sys-pkg:6",
 	"_id": "UCajhSqdRaK0MpHDDmOxXQ",
 	"allow_customize": false,
 	"key": "sys.dbui.perspective.default.DupeList",
+	"rolespec": [
+	],
 	"system": false,
 	"value": {
 		"edit": {
@@ -17,6 +19,17 @@
 				"spec",
 				"orig",
 				"dups"
+			],
+			"recordActions": [
+				"edit",
+				{
+					"icon": "fa-object-ungroup",
+					"label": "Compare Dupes",
+					"params": {
+						"key": "dbui.util.compare_dupes"
+					},
+					"state": "dbui.custompage"
+				}
 			]
 		},
 		"view": {
@@ -32,6 +45,14 @@
 					"icon": "fa-circle",
 					"label": "Process List",
 					"ws": "dupehelper/process_dupe_list"
+				},
+				{
+					"icon": "fa-object-ungroup",
+					"label": "Compare Dupes",
+					"params": {
+						"key": "dbui.util.compare_dupes"
+					},
+					"state": "dbui.custompage"
 				}
 			]
 		}

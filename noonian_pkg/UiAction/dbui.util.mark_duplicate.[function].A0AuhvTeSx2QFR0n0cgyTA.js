@@ -1,7 +1,7 @@
-function (DbuiDataTable, LocalWebService, $state) {
+function (DbuiObjectPicker, Dbui, NoonWebService, $state) {
     /*
       {
-        "key": "dbui.util.mark_duplicate",
+        "ui_action": "dbui.util.mark_duplicate",
         "label": "Mark as Duplicate...",
         "icon": "fa-file"
       }
@@ -10,28 +10,30 @@ function (DbuiDataTable, LocalWebService, $state) {
     var boId = this.targetObj._id;
     var perspective = this.perspective;
     
-    if(!window.confirm('Are you sure THIS RECORD is a duplicate that you want to delete?')) {
-        return;
-    }
     
-    DbuiDataTable.showPickerDialog(boClass, perspective, true, function(selectedItem) {
-        // console.log(selectedItem);
+    Dbui.getPerspective('diff-compare', boClass, 'picker_list').then(function(perspective) {
         
-        LocalWebService.call('dupehelper/mark_duplicate', {
-           boClass: boClass,
-           duplicateId: boId,
-           originalId: selectedItem._id
-        })
-        .then(function(wsResult) {
-            alert(wsResult.message);
-            $state.go(
-                'dbui.view', 
-                {
-                    className: boClass,
-                    id:selectedItem._id,
-                    perspective:perspective
-                }
-            );
+        perspective.filter = {
+            _id:{$ne:boId}
+        };
+        DbuiObjectPicker.showPickerDialog(boClass, 'diff-compare', true, function(selectedItem) {
+            // console.log(selectedItem);
+            
+            NoonWebService.call('dupehelper/mark_duplicate', {
+               boClass: boClass,
+               duplicateId: selectedItem._id,
+               originalId: boId
+            })
+            .then(function(wsResult) {
+                console.log(wsResult);
+                $state.go(
+                    'dbui.custompage', 
+                    {
+                        'key': 'dbui.util.compare_dupes',
+                        id:wsResult.dupelist_id
+                    }
+                );
+            });
         });
-    })
+    });
 }

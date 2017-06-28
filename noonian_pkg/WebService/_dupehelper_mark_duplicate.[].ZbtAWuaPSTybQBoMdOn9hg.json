@@ -1,6 +1,8 @@
 {
-	"__ver": "sys-pkg:4",
+	"__ver": "sys-pkg:5",
 	"_id": "ZbtAWuaPSTybQBoMdOn9hg",
+	"doc": "Creates a DupeList for specified objects and returns the id",
 	"path": "/dupehelper/mark_duplicate",
-	"rolespec": null
+	"rolespec": [
+	]
 }

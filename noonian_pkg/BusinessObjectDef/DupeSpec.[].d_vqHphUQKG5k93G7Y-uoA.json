@@ -1,10 +1,13 @@
 {
-	"__ver": "sys-pkg:2",
+	"__ver": "sys-pkg:3",
 	"_id": "d_vqHphUQKG5k93G7Y-uoA",
 	"abstract": false,
 	"class_name": "DupeSpec",
 	"definition": {
 		"class": {
+			"denormalize_fields": [
+				"class_name"
+			],
 			"ref_class": "BusinessObjectDef",
 			"type": "reference"
 		},

@@ -1,0 +1,24 @@
+<div>
+    <div class="btn-group">
+        <button class="btn btn-danger" ng-click="dedup()">DEDUP!</button>
+        <button class="btn btn-default" ng-click="showDiffs()">Highlight Differences</button>
+        <button class="btn btn-default" ng-click="swap()">Swap</button>
+    </div>
+    <div class="row" ng-if="editPerspective">
+        <div class="objContainer col-md-6" id="Acontainer">
+            <p class="form-control-static" style="font-weight:bold">{{objectA._disp}} <i>{{objectA._id}}</i></p>
+            <button class="btn-btn-primary" ng-click="autoMerge(objectA,objectB)">AutoMerge <i class="fa fa-arrow-right"></i></button>
+            <button class="btn btn-danger" ng-click="save(objectA, formStatusA)" ng-disabled="!formStatusA.isDirty">Save</button>
+            <dbui-object-editor ng-if="!refreshing" the-object="objectA" perspective="editPerspective" form-status="formStatusA"></dbui-object-editor>
+            <dbui-related-viewer ng-if="!refreshing && objectA._id && editPerspective.related" the-object="objectA" perspective-name="editPerspective.name" related-spec="editPerspective.related"></dbui-related-viewer>
+        </div>
+        <div class="objContainer col-md-6" id="Bcontainer">
+            <p ng-show="allObjects.length===1" class="form-control-static" style="font-weight:bold">{{objectB._disp}} <i>{{objectB._id}}</i></p>
+            <select ng-hide="allObjects.length===1" ng-change="objectBChanged(objectB)" class="form-control" ng-model="objectB" ng-options="b.obj as b.label for b in allObjects"></select>
+            <button class="btn-btn-primary" ng-click="autoMerge(objectB, objectA)"><i class="fa fa-arrow-left"></i> AutoMerge</button>
+            <button class="btn btn-danger" ng-click="save(objectB, formStatusB)" ng-disabled="!formStatusB.isDirty">Save</button>
+            <dbui-object-editor ng-if="!refreshing" the-object="objectB" perspective="editPerspective" form-status="formStatusB"></dbui-object-editor>
+            <dbui-related-viewer ng-if="!refreshing && objectB._id && editPerspective.related" the-object="objectB" perspective-name="editPerspective.name" related-spec="editPerspective.related"></dbui-related-viewer>
+        </div>
+    </div>
+</div>

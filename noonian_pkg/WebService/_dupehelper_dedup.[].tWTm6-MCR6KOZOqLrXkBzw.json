@@ -1,0 +1,8 @@
+{
+	"__ver": "sys-pkg:1",
+	"_id": "tWTm6-MCR6KOZOqLrXkBzw",
+	"doc": "\"De-Dupes\" two objects specified: safe merge of fields onto orig, moves references to orig, and then deletes the dup.",
+	"path": "/dupehelper/dedup",
+	"rolespec": [
+	]
+}
