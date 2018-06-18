@@ -1,0 +1,284 @@
+{
+"metadata":{
+	"_id": "W7MD5GI_T9qKrsdU6tYSfw",
+	"build_config": {
+		"exclude": [
+			"User",
+			"PackageConflict"
+		]
+	},
+	"enable_building": false,
+	"key": "sys.duphelper",
+	"major_version": 0,
+	"manifest": {
+		"BusinessObjectDef": {
+			"4HAzS7aERKWG52VFbEK4Kw": "sys-pkg:1",
+			"d_vqHphUQKG5k93G7Y-uoA": "sys-pkg:3"
+		},
+		"CodeModule": {
+			"JLnSa13BQN6STX1RVLI3CQ": "sys-pkg:4"
+		},
+		"Config": {
+			"IdmlQudBTJWAT0olgYIPuQ": "sys-pkg:3",
+			"UCajhSqdRaK0MpHDDmOxXQ": "sys-pkg:6"
+		},
+		"DbuiCustomPage": {
+			"Ci34PWWqTZisDmU1wpXGsg": "sys-pkg:3"
+		},
+		"LabelGroup": {
+			"2B7gVUfxQ7yIfPNUEPQ4wA": "sys-pkg:1",
+			"CajUxrMTQpqJOHg5Ud119g": "sys-pkg:1"
+		},
+		"UiAction": {
+			"A0AuhvTeSx2QFR0n0cgyTA": "sys-pkg:4"
+		},
+		"WebService": {
+			"MbLcge_QQIWbngibKw6h1Q": "sys-pkg:4",
+			"ZbtAWuaPSTybQBoMdOn9hg": "sys-pkg:5",
+			"g0sZRYM7TgSAP9o4uxbKoA": "sys-pkg:4",
+			"tWTm6-MCR6KOZOqLrXkBzw": "sys-pkg:2"
+		}
+	},
+	"minor_version": 7,
+	"name": "Duplicate Helper"
+},
+"business_objects":[
+{
+	"__ver": "sys-pkg:1",
+	"_class": "BusinessObjectDef",
+	"_id": "4HAzS7aERKWG52VFbEK4Kw",
+	"abstract": false,
+	"class_name": "DupeList",
+	"definition": {
+		"dups": [
+			{
+				"type": "reference"
+			}
+		],
+		"orig": {
+			"type": "reference"
+		},
+		"spec": {
+			"ref_class": "DupeSpec",
+			"type": "reference"
+		}
+	},
+	"system": false
+},
+{
+	"__disp": "DupeSpec",
+	"__ver": "sys-pkg:3",
+	"_class": "BusinessObjectDef",
+	"_id": "d_vqHphUQKG5k93G7Y-uoA",
+	"abstract": false,
+	"class_name": "DupeSpec",
+	"definition": {
+		"class": {
+			"denormalize_fields": [
+				"class_name"
+			],
+			"ref_class": "BusinessObjectDef",
+			"type": "reference"
+		},
+		"fn": {
+			"type": "function"
+		},
+		"merge": {
+			"type": "function"
+		}
+	},
+	"superclass": null,
+	"system": false
+},
+{
+	"__ver": "sys-pkg:4",
+	"_class": "CodeModule",
+	"_id": "JLnSa13BQN6STX1RVLI3CQ",
+	"code": "function (db, Q, _) {\n    var exports = {};\n    \n    const saveObj = function(obj) {\n        return obj.save();\n    };\n    \n    /**\n     * \"Mark\" a BusinessObject as a duplicate of another, meaning: \n     * 1) update any references to the 'dup' object to point to the 'original' one\n     * 2) merge in any fields that are null in the 'original' one w/ the values from the 'dup' one.\n     * 3) remove the 'dup' one\n     * @param boClass\n     * @param originalId\n     * @param duplicateId\n     **/\n    exports.markDuplicate = function(boClass, origId, dupId, mergeFn) {\n        console.log('Marking %s.%s duplicate of %s', boClass, dupId, origId);\n        var origObj;\n        var dupObj;\n        \n        var refCount = 0;\n        \n        //A default merge function\n        // just copy over fields from dup that are null in orig.\n        if(!mergeFn) {\n            mergeFn = function(orig, dup) {\n                var anyChange = false;\n                for(var f in dup._bo_meta_data.type_desc_map) {\n                    if(\n                        (orig[f] == null && dup[f] != null) ||\n                        ((origObj[f] instanceof Array && origObj[f].length === 0) && (dupObj[f] instanceof Array && dupObj[f].length > 0))\n                    ) {\n                        anyChange = true;\n                        orig[f] = dup[f];\n                    } \n                }\n                return anyChange;\n            };\n        }\n        \n        return db[boClass].find({_id:{$in:[origId, dupId]}}).then(function(resultArr) {\n        \n            for(var i=0; i < resultArr.length; i++) {\n                if(resultArr[i]._id === origId) {\n                    origObj = resultArr[i];\n                }\n                else {\n                    dupObj = resultArr[i];\n                }\n            }\n            \n            if(!origObj || !dupObj) {\n                throw 'Invalid id(s): '+origId+', '+dupId;\n            }\n            \n            return db.BusinessObjectDef.find({}, {_id:1, class_name:1}).exec();\n        })\n        .then(function(boNames) {\n            \n            //Fix references to dupObj to point to origObj\n            var promiseList = [];\n            \n            _.forEach(boNames, function(boName) {\n                var tdMap = db[boName._id]._bo_meta_data.type_desc_map;\n                _.forEach(tdMap, function(td, fieldName) {\n                   if(td.type === 'reference' && td.ref_class === boClass) {\n                       var refQuery = {};\n                       refQuery[fieldName+'._id'] = dupId;\n                       var p = db[boName._id].find(refQuery).then(function(referencingObjects) {\n                           var nestedPromiseList = [];\n                           var pChain = Q(true);\n                           \n                           for(var i=0; i < referencingObjects.length; i++) {\n                               var refObj = referencingObjects[i];\n                               console.log('DUP FIXER: Updating reference from %s.%s[%s] to %s.%s', boName.class_name, refObj._id, fieldName, boClass, origId);\n                               refObj[fieldName] = {_id:origId};\n                               pChain = pChain.then(refObj.save.bind(refObj, {}));\n                            //   nestedPromiseList.push(refObj.save());\n                               refCount++;\n                           }\n                           \n                        //   return Q.all(nestedPromiseList);\n                           return pChain;\n                       });\n                       promiseList.push(p);\n                   } \n                });\n            });\n            return Q.all(promiseList).then(function() {\n                return db[boClass].findOne({_id:origId}).exec();\n            });\n            \n        })\n        .then(function(updatedOrig) {\n            origObj = updatedOrig;\n            //Merge fields from dupObj, then delete it\n            var saveOrig = mergeFn(origObj, dupObj);\n            \n            var promise1 = saveOrig ? origObj.save() : Q(true);\n            console.log('removing duplicate object: %s', dupObj._id);\n            return Q.all([promise1, dupObj.remove()]);\n        })\n        .then(function() {\n            return refCount;\n        })\n        ;\n    };\n    \n    exports.dupeCleanup = function(boClass, origId, dupId) {\n        console.log('Cleaning up duplicate of %s.%s - %s', boClass, origId, dupId);\n        \n        var refCount = 0;\n        \n        return db.BusinessObjectDef.find({}, {_id:1, class_name:1})\n        .then(function(bods) {\n            \n            //Fix references to dupObj to point to origObj\n            var promiseList = [];\n            \n            _.forEach(bods, function(bod) {\n                var tdMap = db[bod._id]._bo_meta_data.type_desc_map;\n                _.forEach(tdMap, function(td, fieldName) {\n                   if(td.type === 'reference' && td.ref_class === boClass) {\n                       var refQuery = {};\n                       refQuery[fieldName+'._id'] = dupId;\n                       var p = db[bod._id].find(refQuery).then(function(referencingObjects) {\n                           \n                           var pChain = Q(true);\n                           \n                           for(var i=0; i < referencingObjects.length; i++) {\n                               var refObj = referencingObjects[i];\n                               console.log('DUP FIXER: Updating reference from %s.%s[%s] to %s.%s', bod.class_name, refObj._id, fieldName, boClass, origId);\n                               refObj[fieldName] = {_id:origId};\n                            //   pChain = pChain.then(refObj.save.bind(refObj, {}));\n                            pChain = pChain.then(saveObj.bind(null, refObj));\n                               refCount++;\n                           }\n                           \n                        \n                           return pChain;\n                       });\n                       promiseList.push(p);\n                   } \n                });\n            });\n            \n            \n            return Q.all(promiseList).then(function() {\n                return db[boClass].findOne({_id:dupId}).exec();\n            });\n            \n        })\n        .then(function(dupObj) {\n            return dupObj.remove();\n        })\n        .then(function() {\n            return refCount;\n        })\n        ;\n    };\n    \n    \n    return exports;\n}",
+	"name": "DupeUtil",
+	"path": "/sys/util/dupe_util"
+},
+{
+	"__ver": "sys-pkg:3",
+	"_class": "Config",
+	"_id": "IdmlQudBTJWAT0olgYIPuQ",
+	"allow_customize": false,
+	"key": "sys.dbui.perspective.default.DupeSpec",
+	"system": false,
+	"value": {
+		"edit": {
+			"layout": [
+				"class",
+				"fn",
+				"merge"
+			]
+		},
+		"list": {
+			"fields": [
+				"class"
+			]
+		},
+		"view": {
+			"layout": [
+				"class",
+				"fn",
+				"merge"
+			],
+			"recordActions": [
+				"edit",
+				"delete",
+				{
+					"icon": "fa-circle",
+					"label": "Perform Scan",
+					"ws": "dupehelper/scan"
+				}
+			]
+		}
+	}
+},
+{
+	"__ver": "sys-pkg:6",
+	"_class": "Config",
+	"_id": "UCajhSqdRaK0MpHDDmOxXQ",
+	"allow_customize": false,
+	"key": "sys.dbui.perspective.default.DupeList",
+	"rolespec": [
+	],
+	"system": false,
+	"value": {
+		"edit": {
+			"layout": [
+				"dups",
+				"orig",
+				"spec"
+			]
+		},
+		"list": {
+			"fields": [
+				"spec",
+				"orig",
+				"dups"
+			],
+			"recordActions": [
+				"edit",
+				{
+					"icon": "fa-object-ungroup",
+					"label": "Compare Dupes",
+					"params": {
+						"key": "dbui.util.compare_dupes"
+					},
+					"state": "dbui.custompage"
+				}
+			]
+		},
+		"view": {
+			"layout": [
+				"dups",
+				"orig",
+				"spec"
+			],
+			"recordActions": [
+				"edit",
+				"delete",
+				{
+					"icon": "fa-circle",
+					"label": "Process List",
+					"ws": "dupehelper/process_dupe_list"
+				},
+				{
+					"icon": "fa-object-ungroup",
+					"label": "Compare Dupes",
+					"params": {
+						"key": "dbui.util.compare_dupes"
+					},
+					"state": "dbui.custompage"
+				}
+			]
+		}
+	}
+},
+{
+	"__ver": "sys-pkg:3",
+	"_class": "DbuiCustomPage",
+	"_id": "Ci34PWWqTZisDmU1wpXGsg",
+	"body": "<div>\n    <div class=\"col-md-12 dbui-header\">Fix Duplicate {{className}} Records</div>\n    <div ng-hide=\"editPerspective\" class=\"text-center\" style=\"padding:10%\"><i class=\"fa fa-spin fa-spinner fa-5x\"></i></div>\n    <div class=\"row\">\n        <div class=\"col-md-2\">\n            <button class=\"btn btn-default\" ng-click=\"showInstructions=!showInstructions\"><i class=\"fa fa-info\"></i> {{ showInstructions ? 'Hide' : 'Show' }} Instructions</button>\n        </div>\n        <div class=\"col-md-10\" ng-show=\"showInstructions\" style=\"border:1px solid lightgray\">\n            <p style=\"text-decoration:underline\">This screen is for merging duplicate records.</p>\n            <ol>\n                <li>Use the \"Pick Record\" tabs below to select the records that are duplicates of one another.\n                    <ul>\n                        <li>Use the \"text search\" to locate the appropriate record. </li>\n                        <li>Use the <i class=\"fa fa-eye\"></i> icon to preview the record.</li>\n                        <li>Use the <i class=\"fa fa-check-square\"></i> icon to select it.</li>\n                    </ul>\n                </li>\n                <li>Use the <strong>MERGED</strong> tab to review and edit the resulting merged record. \n                    <ul>\n                        <li class=\"bg-success\">Fields with a <strong>green</strong> background are \"safe\" - either the two records had identical values for that field, or one of them had no value.</li>\n                        <li class=\"bg-warning\">Fields with a <strong>yellow</strong> background should be double-checked for accuracy, as they have been automatically combined. If the field is a text block, the two blocks have been concatenated.  If the field is a list of values, the lists have been combined. </li>\n                        <li class=\"bg-danger\">Fields with a <strong>red</strong> background require manual intervention, as the two records have DIFFERENT values, requring you to select which one to use.  The color-coded \"A\"/\"B\" button allows you to select which record to use for the value.</li>\n                        <li>Note: any field may be edited manually to the desired value.</li>\n                    </ul>\n                </li>\n                <li>Click the SAVE MERGED RECORD button at the bottom to commit the merge.\n                    <ul>\n                        <li>The merged record will be saved, retaining the id of record A</li>\n                        <li>The duplicate B will be deleted from the database.</li>\n                        <li>Any references from other records to record B will be updated to refer to the merged record.</li>\n                    </ul>\n                </li>\n            </ol>\n        </div>\n    </div>\n    <div class=\"row\" ng-show=\"mergeComplete\">\n        <div class=\"col-md-12\">\n            <h3>Merge Complete!</h3>\n            <p>{{resultMessage}}</p>\n        </div>\n    </div>\n    <div class=\"row\" ng-if=\"!mergeComplete && editPerspective\">\n        <div class=\"col-md-12\">\n            <uib-tabset active=\"tabStatus.activeTab\">\n                <uib-tab ng-repeat=\"t in compTabs\" select=\"onTabChanged(t)\" index=\"t.index\">\n                    <uib-tab-heading>\n                        <span ng-hide=\"t.object\">Pick Record {{t.index}}</span>\n                        <span ng-show=\"t.object\" style=\"padding:5px; background-color:{{t.bgColor}};color:{{t.fgColor}}\"><strong>Record {{t.index}}</strong>: {{t.object._disp}}</span>\n                    </uib-tab-heading>\n                    <div ng-if=\"!t.object && !refreshing\">\n                        <dbui-business-object-browser ng-if=\"!t.object\" bo-class=\"className\" perspective=\"listPerspective\" enable-query=\"true\" enable-search=\"true\" ></dbui-business-object-browser>\n                    </div>\n                    \n                    \n                    <dbui-object-viewer ng-if=\"t.object\" the-object=\"t.object\" perspective=\"editPerspective\" form-status=\"formStatusA\"></dbui-object-viewer>\n                    \n                </uib-tab>\n                <uib-tab index=\"'merged'\">\n                    <uib-tab-heading>MERGED</uib-tab-heading>\n                    <div ng-hide=\"mergeReady\"><p>Please select at least two records to merge.</p></div>\n                    <div ng-form=\"editorForm\" ng-if=\"mergeReady\">\n                        <div ng-repeat=\"sec in editPerspective.layout\" class=\"dbui-subsection-container\" id=\"{{sec.section_id}}\">\n                            \n                          <div class=\"dbui-subsection-header\" ng-if=\"sec.subheading\" ng-click=\"sec.isHidden = !sec.isHidden\">\n                              <h4>{{labelGroup._subheading[sec.subheading] ? labelGroup._subheading[sec.subheading] : sec.subheading}} <i class=\"pull-right glyphicon\" ng-class=\"{'glyphicon-chevron-down': !sec.isHidden, 'glyphicon-chevron-right': sec.isHidden}\"></i></h4>\n                          </div>\n                          <div ng-hide=\"sec.isHidden\" class=\"form-horizontal\">\n                            <div class=\"row\" ng-repeat=\"r in sec.rows\">\n                              \n                                <div class=\"{{colClass.top[r.length]}}\" ng-repeat=\"fieldName in r\">\n                                  <div class=\"form-group {{getMergeStatusClass(fieldName)}}\">\n                                      \n                                    <div class=\"{{colClass.label[r.length]}}\" style=\"text-align:right\">\n                                        <label for=\"{{fieldName}}\" class=\"control-label\" uib-tooltip=\"{{getTextForStatus(fieldName)}}\"> {{ labelGroup.getLabel(fieldName) }}</label>\n                                        <div ng-if=\"mergeStatus[fieldName].status==='manual_merge_required'\" class=\"btn-group\" uib-dropdown>\n                                            <button class=\"btn\" uib-dropdown-toggle style=\"{{getMergePickerStyle(fieldName)}}\">{{ mergeStatus[fieldName].source }} </button>\n                                            <ul class=\"dropdown-menu\" uib-dropdown-menu>\n                                                <li ng-repeat=\"t in compTabs\">\n                                                    <a href ng-show=\"mergeStatus[fieldName].source !== t.index\" ng-click=\"pickValue(t, fieldName)\">{{t.index}}: {{getDisplayValue(t, fieldName)}}</a>\n                                                    <a ng-show=\"mergeStatus[fieldName].source == t.index\"><i>{{t.index}}: {{getDisplayValue(t, fieldName)}}</i></a>\n                                                </li>\n                                            </ul>\n                                        </div>\n                                    </div>\n                                    <dbui-field-editor fieldtype=\"{{typeDescMap[fieldName].type}}\" type-desc=\"typeDescMap[fieldName]\" elem-id=\"fieldName\" ng-model=\"mergedObj[fieldName]\" class=\"{{colClass.value[r.length]}} dbui-edit-container\" field-customizations=\"perspective.fieldCustomizations[fieldName]\" context-object=\"mergedObj\" link-status=\"linkStatus[fieldName]\"></dbui-field-editor>\n                        \n                                  </div>\n                                </div>\n                              \n                            </div>\n                          </div>\n                        </div>\n                        </div>\n                        <div class=\"row\">\n                            <div class=\"col-md-12\">\n                                <button class=\"btn btn-block btn-danger\" uib-tooltip=\"Duplicate will be removed; all references to the duplicate record will updated to the merged record.\" ng-click=\"commitMerge()\"><i class=\"fa fa-save\"></i> SAVE MERGED RECORD </button>\n                            </div>\n                        </div>\n                </uib-tab>\n            </uib-tabset>\n        </div>\n    </div>\n    \n</div>",
+	"controller": "function (db, $scope, $stateParams, $q, $timeout, NoonWebService, DbuiFieldType, DbuiAlert) {\n    \n    var bgColors = ['#004586','#ffd320','#ff420e','#579d1c','#7e0021','#83caff','#314004'];\n    var fgColors = ['white','black','black','black','white','black','white'];\n    \n    \n    var dupeListId = $stateParams.id;\n    // console.log($stateParams);\n    \n    var className = $scope.className = $stateParams.className || ($stateParams.extraParams && $stateParams.extraParams.className);\n    var perspectiveName = $stateParams.perspective || 'default';\n    \n    var TargetModel = db[className];\n    var tdMap = $scope.typeDescMap = TargetModel._bo_meta_data.type_desc_map;\n    var fieldList;\n    \n    //Stuff for merge pane:\n    $scope.labelGroup = TargetModel._bo_meta_data.field_labels;\n    $scope.colClass = Dbui.columnClasses;\n    $scope.linkStatus = {};\n    // $scope.$watch('linkStatus', function(ls) {\n    //     $scope.editorForm.$setPristine();\n    //     if($scope.formStatus) $scope.formStatus.isDirty = false;\n    // }, true);\n    \n    \n    const tabStatus = $scope.tabStatus = {activeTab:'A'};\n    const compTabs = $scope.compTabs = [\n        {index:'A',bgColor:bgColors[0],fgColor:fgColors[0]},\n        {index:'B',bgColor:bgColors[1],fgColor:fgColors[1]}\n    ];\n    var tabIndex = _.indexBy(compTabs, 'index');\n    var tabsByObjectId;\n    \n    const updateFilter = function() {\n        var selected = [];\n        _.forEach(compTabs, t => {\n            if(t.id) {\n                selected.push({_id:{$ne:t.id}});\n            }\n        });\n        \n        var query = null;\n        if(selected.length == 1) {\n            query = selected[0];\n        }\n        else {\n            query = {$and:selected};\n        }\n        // console.log('setting query', query);\n        \n        $scope.listPerspective.filter = query;\n        $scope.refreshForms();\n    }\n    \n    const checkMergeReady = function() {\n        var anyEmpty = false;\n        _.forEach(compTabs, t => {\n            anyEmpty = anyEmpty || !t.object;\n        });\n        \n        if(!$scope.mergeReady && !anyEmpty) {\n            tabStatus.activeTab = 3;\n            //Initialize the merge!\n            $scope.mergedObj = new TargetModel();\n            $scope.mergeStatus = {};\n            \n            _.assign($scope.mergedObj, compTabs[0].object);\n            \n            tabsByObjectId = _.indexBy(compTabs, 'object._id');\n            \n            $scope.autoMerge(compTabs[1].object, $scope.mergedObj);\n            \n            tabStatus.activeTab = 'merged';\n            $scope.mergeReady = true;\n        }\n        \n        \n        \n    }\n    \n    const selectListItem = function(selection) {\n        // console.log(tabStatus);\n        // console.log(selection.targetObj);\n        var selectedObj = selection.targetObj;\n        var myTab = tabIndex[tabStatus.activeTab];\n        myTab.id = selectedObj._id;\n        myTab.object = TargetModel.findOne({_id:selectedObj._id});\n        updateFilter();\n        myTab.object.$promise.then(checkMergeReady);\n    };\n    \n    \n    \n    $q.all([\n        Dbui.getPerspective(perspectiveName, className, 'diff-compare'),\n        DbuiFieldType.cacheTypeInfoForClass(className, 'edit')\n    ])\n    .then(function([perspective]) {\n        // console.log(perspective);\n        $scope.editPerspective = perspective;\n        $scope.listPerspective = perspective;\n        \n        perspective.recordActions = ['dialog-view', {icon:'fa-check-square', fn:selectListItem}];\n        \n        fieldList = [];\n        _.forEach(perspective.layout, function(sec) {\n            _.forEach(sec.rows, function(row) {\n                _.forEach(row, function(f) {\n                    fieldList.push(f);\n                });\n            });\n        });\n        \n    },\n    function(err) {\n        console.error('retreiving perspectives', err);\n    }\n    )\n    ;\n    \n    \n    \n    \n    \n    $scope.commitMerge = function() {\n        console.log(compTabs);\n        console.log('$scope.mergedObj', $scope.mergedObj);\n        \n        $scope.mergedObj.save().then(function(m) {\n            DbuiAlert.success('Successfully saved '+m._disp);\n            var dup = compTabs[1].object;\n            \n            \n            return NoonWebService.call('dupehelper/dedup', {\n              boClass: className,\n              duplicateId:  dup._id,\n              originalId:  m._id\n            })\n            .then(function(wsResult) {\n                DbuiAlert.success(wsResult.message);\n                $scope.resultMessage = wsResult.message;\n                $scope.mergeComplete = true;\n            });\n        },\n        function(err) {\n            console.log('error saving merged', err);\n            DbuiAlert.danger(err);\n        });\n        \n       \n        \n    };\n\n    \n    \n    \n    var mergeText = function(to, from, field, mergeStatus) {\n        var a = to[field];\n        var b = from[field];\n        \n        if(a === b) {\n            mergeStatus[field] = {status:'identical'};\n        }\n        else if(a && b) {\n            mergeStatus[field] = {status:'combined'};\n            to[field] = a+'\\n'+b;\n        }\n        else if(a) {\n            mergeStatus[field] = {\n                status:'one_empty',\n                source:tabsByObjectId[to._id].index\n            };\n        }\n        else {\n            mergeStatus[field] = {\n                status:'one_empty',\n                source:tabsByObjectId[from._id].index\n            };\n            \n            to[field] = b;\n        }\n    };\n    \n    var mergeArray = function(to, from, field, mergeStatus) {\n        var arrA = to[field] || [];\n        var arrB = from[field] || [];\n        \n        if(!arrA.length && !arrB.length) {\n            mergeStatus[field] = {status:'identical'};\n            return;\n        }\n        else if(arrA.length && !arrB.length) {\n            mergeStatus[field] = {\n                status:'one_empty',\n                source:tabsByObjectId[to._id].index\n            };\n            return;\n        }\n        else if(!arrA.length && arrB.length) {\n            mergeStatus[field] = {\n                status:'one_empty',\n                source:tabsByObjectId[from._id].index\n            };\n            to[field] = arrB;\n            return;\n        }\n        \n        var anyChange = false;\n        //add each of b into a if not already there\n        for(var i = 0; i < arrB.length; i++) {\n            var found = false;\n            for(var j=0; j < arrA.length; j++) {\n                var a = arrA[j], b = arrB[i];\n                if(!a || !b) continue;\n                if(a === b || a._id === b._id || angular.equals(a, b)) {\n                    found = true;\n                    break;\n                }\n            }\n            if(!found) {\n                arrA.push(arrB[i]);\n                anyChange = true;\n            }\n        }\n        \n        if(anyChange) {\n            mergeStatus[field] = {status:'combined'};\n        }\n        else {\n            mergeStatus[field] = {status:'identical'};\n        }\n    };\n    \n    $scope.autoMerge = function(from, to) {\n        var mergeStatus = $scope.mergeStatus;\n        \n        _.forEach(fieldList, function(f) {\n            var td = tdMap.getTypeDescriptor(f);\n            \n            \n        \n            if(td.type === 'text') {\n                mergeText(to, from, f, mergeStatus);\n            }\n            else if(from[f] instanceof Array && to[f] instanceof Array) {\n                mergeArray(to, from, f, mergeStatus);\n            }\n            else if((to[f] == null || to[f] == '') && (from[f] == null || from[f] == '')) {\n                mergeStatus[f] = {status:'identical'};\n            }\n            else if(angular.equals(to[f], from[f])) {\n                mergeStatus[f] = {status:'identical'};\n            }\n            else if((to[f] == null || to[f] == '') && from[f] != null) {\n                to[f] = from[f];\n                mergeStatus[f] = {\n                    status:'one_empty',\n                    source:tabsByObjectId[from._id].index\n                };\n            }\n            else if((from[f] == null || from[f] == '') && to[f] != null) {\n                mergeStatus[f] = {\n                    status:'one_empty',\n                    source:tabsByObjectId[to._id].index\n                };\n            }\n            else {\n                //both not null, and not equal\n                mergeStatus[f] = {\n                    status:'manual_merge_required',\n                    source:tabsByObjectId[to._id].index,\n                    sourceTab:tabsByObjectId[to._id]\n                };\n            }\n        });\n        \n    };\n    \n    var statusToClass = {\n        manual_merge_required:'bg-danger',\n        one_empty:'bg-success',\n        identical:'bg-success',\n        combined:'bg-warning'\n    };\n    $scope.getMergeStatusClass = function(f) {\n        return statusToClass[$scope.mergeStatus[f].status];\n    };\n    \n    $scope.getMergePickerStyle = function(f) {\n        var t = $scope.mergeStatus[f].sourceTab;\n        return `background-color:${t.bgColor};color:${t.fgColor}`;\n    };\n    \n    $scope.getTextForStatus = function(f) {\n        var s = $scope.mergeStatus[f];\n        if(s.status === 'one_empty')  {\n            return `Using value from ${s.source} (other value empty)`;\n        }\n        if(s.status === 'identical') {\n            return 'Identical values';\n        }\n        if(s.status === 'manual_merge_required') {\n            return 'Different values in each record.  Merge Manually';\n        }\n        if(s.status === 'combined') {\n            return 'Automatically combined the values';\n        }\n        \n    };\n    \n    \n    $scope.getDisplayValue = function(t, fieldName) {\n        var val = t.object[fieldName];\n        \n        return val._disp || val;\n    };\n    \n    $scope.pickValue = function(t, fieldName) {\n        $scope.mergedObj[fieldName] = t.object[fieldName]\n        var ms = $scope.mergeStatus[fieldName];\n        ms.sourceTab = t;\n        ms.source = t.index;\n        // console.log(`mergeStatus for ${fieldName}`, ms);\n        \n    };\n    \n    \n    \n    \n     \n    $scope.refreshForms = function() {\n         $scope.refreshing = true;\n         $timeout(function() {\n             $scope.refreshing = false;\n            //  wiredup = false;\n         }, 100);\n    };\n     \n}",
+	"doc": "This screen shows a side-by-side view of objects from a DupeList.  Left-hand side shows \"orig\", and right hand allows you to select from the dups.  You can highlight the different fields, and copy values over in either direction.",
+	"key": "dbui.util.compare_dupes"
+},
+{
+	"__ver": "sys-pkg:1",
+	"_class": "LabelGroup",
+	"_id": "2B7gVUfxQ7yIfPNUEPQ4wA",
+	"key": "sys.dbui.bo.DupeList",
+	"language": {
+		"_disp": "English",
+		"_id": "-9vPfv2lEeSFtiimx_V4dw",
+		"code": "en"
+	},
+	"value": {
+		"dups": "Dups",
+		"orig": "Orig",
+		"spec": "Spec"
+	}
+},
+{
+	"__ver": "sys-pkg:1",
+	"_class": "LabelGroup",
+	"_id": "CajUxrMTQpqJOHg5Ud119g",
+	"key": "sys.dbui.bo.DupeSpec",
+	"language": {
+		"_disp": "English",
+		"_id": "-9vPfv2lEeSFtiimx_V4dw",
+		"code": "en"
+	},
+	"value": {
+		"class": "Class",
+		"fn": "Fn"
+	}
+},
+{
+	"__ver": "sys-pkg:4",
+	"_class": "UiAction",
+	"_id": "A0AuhvTeSx2QFR0n0cgyTA",
+	"function": "function (DbuiObjectPicker, Dbui, NoonWebService, $state) {\n    /*\n      {\n        \"ui_action\": \"dbui.util.mark_duplicate\",\n        \"label\": \"Mark as Duplicate...\",\n        \"icon\": \"fa-file\"\n      }\n    */\n    var boClass = this.className;\n    var boId = this.targetObj._id;\n    var perspective = this.perspective;\n    \n    \n    Dbui.getPerspective('diff-compare', boClass, 'picker_list').then(function(perspective) {\n        \n        perspective.filter = {\n            _id:{$ne:boId}\n        };\n        DbuiObjectPicker.showPickerDialog(boClass, 'diff-compare', true, function(selectedItem) {\n            // console.log(selectedItem);\n            \n            NoonWebService.call('dupehelper/mark_duplicate', {\n               boClass: boClass,\n               duplicateId: selectedItem._id,\n               originalId: boId\n            })\n            .then(function(wsResult) {\n                console.log(wsResult);\n                $state.go(\n                    'dbui.custompage', \n                    {\n                        'key': 'dbui.util.compare_dupes',\n                        id:wsResult.dupelist_id\n                    }\n                );\n            });\n        });\n    });\n}",
+	"key": "dbui.util.mark_duplicate"
+},
+{
+	"__ver": "sys-pkg:4",
+	"_class": "WebService",
+	"_id": "MbLcge_QQIWbngibKw6h1Q",
+	"function": "function (queryParams, db, _, Q) {\n    var defId = queryParams.id;\n    var targetClass;\n    \n    var compareFn;\n    var dupeCount = 0;\n    \n    return db.DupeSpec.findOne({_id:defId}).exec().then(function(dd) {\n        if(!dd) {\n            throw 'DupeSpec '+defId+' not found.';\n        }\n        \n        if(!dd.class || !dd.fn) {\n            throw 'Invalid DupeSpec '+defId+' - missing field.';\n        }\n        \n        \n        \n        compareFn = dd.fn;\n        targetClass = dd.class._disp;\n        \n        console.log('Scanning instances of %s for dups...', targetClass)\n        \n        return db[dd.class._id].find({}).exec();\n        \n    }).then(function(objList) {\n        \n        var promiseList = [];\n        var caughtIds = {};\n        \n        for(var i=0; i < objList.length-1; i++) {\n            var obj1 = objList[i];\n            var dupList = [];\n            for(var j=i+1; j < objList.length; j++) {\n                var obj2 = objList[j];\n                \n                if(!caughtIds[obj2._id] && compareFn(obj1, obj2)) {\n                    //Gotta dup:\n                    caughtIds[obj2._id] = true;\n                    dupList.push({_id:obj2._id, ref_class:targetClass});\n                }\n            }\n            \n            if(dupList.length > 0) {\n                console.log('%s -> %s dups', obj1._disp, dupList.length);\n                promiseList.push(\n                    new db.DupeList({\n                        spec:{_id:defId},\n                        orig:{_id:obj1._id, ref_class:targetClass},\n                        dups:dupList\n                    }).save()\n                );\n            }\n        }\n        \n        return Q.all(promiseList);\n        \n    })\n    .then(function(resultArr) {\n        return {message:'Found '+resultArr.length+' records w/ duplicate(s)'};\n    })\n    ;\n    \n}",
+	"path": "/dupehelper/scan",
+	"rolespec": null
+},
+{
+	"__disp": "/dupehelper/mark_duplicate",
+	"__ver": "sys-pkg:5",
+	"_class": "WebService",
+	"_id": "ZbtAWuaPSTybQBoMdOn9hg",
+	"doc": "Creates a DupeList for specified objects and returns the id",
+	"function": "function (db, queryParams) {\n    var boClass = queryParams.boClass;\n    var origId = queryParams.originalId;\n    var dupId = queryParams.duplicateId;\n    \n    if(!boClass || !origId || !dupId) {\n        throw 'Missing required parameter(s)';\n    }\n    \n    \n    return db.DupeSpec.findOne({'class.class_name':boClass}).then(function(ds) {\n        if(!ds) {\n            throw new Error('missing DupeSpec for class '+boClass);\n        }\n        \n        var dupList = new db.DupeList({\n            spec:ds,\n            orig:{_id:origId, ref_class:boClass},\n            dups:[{_id:dupId, ref_class:boClass}]\n        });\n        return dupList.save().then(function() {\n            return {\n                dupelist_id:dupList._id,\n                message:'Please compare, merge,and save, then click DEDUP'\n            };\n        })\n    });\n    \n}",
+	"path": "/dupehelper/mark_duplicate",
+	"rolespec": [
+	]
+},
+{
+	"__ver": "sys-pkg:4",
+	"_class": "WebService",
+	"_id": "g0sZRYM7TgSAP9o4uxbKoA",
+	"function": "function (db, DupeUtil, queryParams, Q, _) {\n    \n    if(!queryParams.id) {\n        throw 'Missing required parameter(s)';\n    }\n    \n    var dupeList;\n    \n    return db.DupeList.findOne({_id:queryParams.id}).then(function(dl) {\n        if(!dl) {\n            throw 'invalid DupeList id '+queryParams.id;\n        }\n        dupeList = dl;\n        console.log(dl);\n        \n        return db.DupeSpec.findOne({_id:dupeList.spec._id}).exec();\n    })\n    .then(function(dupeSpec) {\n        \n        var boClass = dupeList.orig.ref_class;\n        var origId = dupeList.orig._id;\n        \n        var promiseChain = Q(true);\n        _.forEach(dupeList.dups, function(dupRef) {\n            var dupId = dupRef._id;\n            \n            promiseChain = promiseChain.then(DupeUtil.markDuplicate.bind(undefined, boClass, origId, dupId, dupeSpec.merge))\n            \n        });\n        \n        return promiseChain;\n    })\n    \n    .then(function(count) {\n        return {message:'updated '+count+' references'};\n    });\n}",
+	"path": "/dupehelper/process_dupe_list",
+	"rolespec": null
+},
+{
+	"__disp": "/dupehelper/dedup",
+	"__ver": "sys-pkg:2",
+	"_class": "WebService",
+	"_id": "tWTm6-MCR6KOZOqLrXkBzw",
+	"doc": "\"De-Dupes\" two objects specified: moves references to orig, and then deletes the dup.",
+	"function": "function (DupeUtil, queryParams) {\n    var boClass = queryParams.boClass;\n    var origId = queryParams.originalId;\n    var dupId = queryParams.duplicateId;\n    \n    if(!boClass || !origId || !dupId) {\n        throw 'Missing required parameter(s)';\n    }\n    \n    return DupeUtil.dupeCleanup(boClass, origId, dupId).then(function(count) {\n        return {message:'updated '+count+' references'};\n    });\n}",
+	"path": "/dupehelper/dedup",
+	"rolespec": [
+	]
+}]}
