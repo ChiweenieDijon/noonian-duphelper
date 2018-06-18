@@ -1,24 +1,104 @@
 <div>
-    <div class="btn-group">
-        <button class="btn btn-danger" ng-click="dedup()">DEDUP!</button>
-        <button class="btn btn-default" ng-click="showDiffs()">Highlight Differences</button>
-        <button class="btn btn-default" ng-click="swap()">Swap</button>
-    </div>
-    <div class="row" ng-if="editPerspective">
-        <div class="objContainer col-md-6" id="Acontainer">
-            <p class="form-control-static" style="font-weight:bold">{{objectA._disp}} <i>{{objectA._id}}</i></p>
-            <button class="btn-btn-primary" ng-click="autoMerge(objectA,objectB)">AutoMerge <i class="fa fa-arrow-right"></i></button>
-            <button class="btn btn-danger" ng-click="save(objectA, formStatusA)" ng-disabled="!formStatusA.isDirty">Save</button>
-            <dbui-object-editor ng-if="!refreshing" the-object="objectA" perspective="editPerspective" form-status="formStatusA"></dbui-object-editor>
-            <dbui-related-viewer ng-if="!refreshing && objectA._id && editPerspective.related" the-object="objectA" perspective-name="editPerspective.name" related-spec="editPerspective.related"></dbui-related-viewer>
+    <div class="col-md-12 dbui-header">Fix Duplicate {{className}} Records</div>
+    <div ng-hide="editPerspective" class="text-center" style="padding:10%"><i class="fa fa-spin fa-spinner fa-5x"></i></div>
+    <div class="row">
+        <div class="col-md-2">
+            <button class="btn btn-default" ng-click="showInstructions=!showInstructions"><i class="fa fa-info"></i> {{ showInstructions ? 'Hide' : 'Show' }} Instructions</button>
         </div>
-        <div class="objContainer col-md-6" id="Bcontainer">
-            <p ng-show="allObjects.length===1" class="form-control-static" style="font-weight:bold">{{objectB._disp}} <i>{{objectB._id}}</i></p>
-            <select ng-hide="allObjects.length===1" ng-change="objectBChanged(objectB)" class="form-control" ng-model="objectB" ng-options="b.obj as b.label for b in allObjects"></select>
-            <button class="btn-btn-primary" ng-click="autoMerge(objectB, objectA)"><i class="fa fa-arrow-left"></i> AutoMerge</button>
-            <button class="btn btn-danger" ng-click="save(objectB, formStatusB)" ng-disabled="!formStatusB.isDirty">Save</button>
-            <dbui-object-editor ng-if="!refreshing" the-object="objectB" perspective="editPerspective" form-status="formStatusB"></dbui-object-editor>
-            <dbui-related-viewer ng-if="!refreshing && objectB._id && editPerspective.related" the-object="objectB" perspective-name="editPerspective.name" related-spec="editPerspective.related"></dbui-related-viewer>
+        <div class="col-md-10" ng-show="showInstructions" style="border:1px solid lightgray">
+            <p style="text-decoration:underline">This screen is for merging duplicate records.</p>
+            <ol>
+                <li>Use the "Pick Record" tabs below to select the records that are duplicates of one another.
+                    <ul>
+                        <li>Use the "text search" to locate the appropriate record. </li>
+                        <li>Use the <i class="fa fa-eye"></i> icon to preview the record.</li>
+                        <li>Use the <i class="fa fa-check-square"></i> icon to select it.</li>
+                    </ul>
+                </li>
+                <li>Use the <strong>MERGED</strong> tab to review and edit the resulting merged record. 
+                    <ul>
+                        <li class="bg-success">Fields with a <strong>green</strong> background are "safe" - either the two records had identical values for that field, or one of them had no value.</li>
+                        <li class="bg-warning">Fields with a <strong>yellow</strong> background should be double-checked for accuracy, as they have been automatically combined. If the field is a text block, the two blocks have been concatenated.  If the field is a list of values, the lists have been combined. </li>
+                        <li class="bg-danger">Fields with a <strong>red</strong> background require manual intervention, as the two records have DIFFERENT values, requring you to select which one to use.  The color-coded "A"/"B" button allows you to select which record to use for the value.</li>
+                        <li>Note: any field may be edited manually to the desired value.</li>
+                    </ul>
+                </li>
+                <li>Click the SAVE MERGED RECORD button at the bottom to commit the merge.
+                    <ul>
+                        <li>The merged record will be saved, retaining the id of record A</li>
+                        <li>The duplicate B will be deleted from the database.</li>
+                        <li>Any references from other records to record B will be updated to refer to the merged record.</li>
+                    </ul>
+                </li>
+            </ol>
         </div>
     </div>
+    <div class="row" ng-show="mergeComplete">
+        <div class="col-md-12">
+            <h3>Merge Complete!</h3>
+            <p>{{resultMessage}}</p>
+        </div>
+    </div>
+    <div class="row" ng-if="!mergeComplete && editPerspective">
+        <div class="col-md-12">
+            <uib-tabset active="tabStatus.activeTab">
+                <uib-tab ng-repeat="t in compTabs" select="onTabChanged(t)" index="t.index">
+                    <uib-tab-heading>
+                        <span ng-hide="t.object">Pick Record {{t.index}}</span>
+                        <span ng-show="t.object" style="padding:5px; background-color:{{t.bgColor}};color:{{t.fgColor}}"><strong>Record {{t.index}}</strong>: {{t.object._disp}}</span>
+                    </uib-tab-heading>
+                    <div ng-if="!t.object && !refreshing">
+                        <dbui-business-object-browser ng-if="!t.object" bo-class="className" perspective="listPerspective" enable-query="true" enable-search="true" ></dbui-business-object-browser>
+                    </div>
+                    
+                    
+                    <dbui-object-viewer ng-if="t.object" the-object="t.object" perspective="editPerspective" form-status="formStatusA"></dbui-object-viewer>
+                    
+                </uib-tab>
+                <uib-tab index="'merged'">
+                    <uib-tab-heading>MERGED</uib-tab-heading>
+                    <div ng-hide="mergeReady"><p>Please select at least two records to merge.</p></div>
+                    <div ng-form="editorForm" ng-if="mergeReady">
+                        <div ng-repeat="sec in editPerspective.layout" class="dbui-subsection-container" id="{{sec.section_id}}">
+                            
+                          <div class="dbui-subsection-header" ng-if="sec.subheading" ng-click="sec.isHidden = !sec.isHidden">
+                              <h4>{{labelGroup._subheading[sec.subheading] ? labelGroup._subheading[sec.subheading] : sec.subheading}} <i class="pull-right glyphicon" ng-class="{'glyphicon-chevron-down': !sec.isHidden, 'glyphicon-chevron-right': sec.isHidden}"></i></h4>
+                          </div>
+                          <div ng-hide="sec.isHidden" class="form-horizontal">
+                            <div class="row" ng-repeat="r in sec.rows">
+                              
+                                <div class="{{colClass.top[r.length]}}" ng-repeat="fieldName in r">
+                                  <div class="form-group {{getMergeStatusClass(fieldName)}}">
+                                      
+                                    <div class="{{colClass.label[r.length]}}" style="text-align:right">
+                                        <label for="{{fieldName}}" class="control-label" uib-tooltip="{{getTextForStatus(fieldName)}}"> {{ labelGroup.getLabel(fieldName) }}</label>
+                                        <div ng-if="mergeStatus[fieldName].status==='manual_merge_required'" class="btn-group" uib-dropdown>
+                                            <button class="btn" uib-dropdown-toggle style="{{getMergePickerStyle(fieldName)}}">{{ mergeStatus[fieldName].source }} </button>
+                                            <ul class="dropdown-menu" uib-dropdown-menu>
+                                                <li ng-repeat="t in compTabs">
+                                                    <a href ng-show="mergeStatus[fieldName].source !== t.index" ng-click="pickValue(t, fieldName)">{{t.index}}: {{getDisplayValue(t, fieldName)}}</a>
+                                                    <a ng-show="mergeStatus[fieldName].source == t.index"><i>{{t.index}}: {{getDisplayValue(t, fieldName)}}</i></a>
+                                                </li>
+                                            </ul>
+                                        </div>
+                                    </div>
+                                    <dbui-field-editor fieldtype="{{typeDescMap[fieldName].type}}" type-desc="typeDescMap[fieldName]" elem-id="fieldName" ng-model="mergedObj[fieldName]" class="{{colClass.value[r.length]}} dbui-edit-container" field-customizations="perspective.fieldCustomizations[fieldName]" context-object="mergedObj" link-status="linkStatus[fieldName]"></dbui-field-editor>
+                        
+                                  </div>
+                                </div>
+                              
+                            </div>
+                          </div>
+                        </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-12">
+                                <button class="btn btn-block btn-danger" uib-tooltip="Duplicate will be removed; all references to the duplicate record will updated to the merged record." ng-click="commitMerge()"><i class="fa fa-save"></i> SAVE MERGED RECORD </button>
+                            </div>
+                        </div>
+                </uib-tab>
+            </uib-tabset>
+        </div>
+    </div>
+    
 </div>
