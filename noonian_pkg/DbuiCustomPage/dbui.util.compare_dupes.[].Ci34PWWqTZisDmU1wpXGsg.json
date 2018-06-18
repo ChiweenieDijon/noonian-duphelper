@@ -1,5 +1,5 @@
 {
-	"__ver": "sys-pkg:2",
+	"__ver": "sys-pkg:3",
 	"_id": "Ci34PWWqTZisDmU1wpXGsg",
 	"doc": "This screen shows a side-by-side view of objects from a DupeList.  Left-hand side shows \"orig\", and right hand allows you to select from the dups.  You can highlight the different fields, and copy values over in either direction.",
 	"key": "dbui.util.compare_dupes"

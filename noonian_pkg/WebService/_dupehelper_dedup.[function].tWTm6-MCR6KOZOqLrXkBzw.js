@@ -7,7 +7,7 @@ function (DupeUtil, queryParams) {
         throw 'Missing required parameter(s)';
     }
     
-    return DupeUtil.markDuplicate(boClass, origId, dupId).then(function(count) {
+    return DupeUtil.dupeCleanup(boClass, origId, dupId).then(function(count) {
         return {message:'updated '+count+' references'};
     });
 }

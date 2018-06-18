@@ -1,6 +1,10 @@
 function (db, Q, _) {
     var exports = {};
     
+    const saveObj = function(obj) {
+        return obj.save();
+    };
+    
     /**
      * "Mark" a BusinessObject as a duplicate of another, meaning: 
      * 1) update any references to the 'dup' object to point to the 'original' one
@@ -96,6 +100,59 @@ function (db, Q, _) {
             var promise1 = saveOrig ? origObj.save() : Q(true);
             console.log('removing duplicate object: %s', dupObj._id);
             return Q.all([promise1, dupObj.remove()]);
+        })
+        .then(function() {
+            return refCount;
+        })
+        ;
+    };
+    
+    exports.dupeCleanup = function(boClass, origId, dupId) {
+        console.log('Cleaning up duplicate of %s.%s - %s', boClass, origId, dupId);
+        
+        var refCount = 0;
+        
+        return db.BusinessObjectDef.find({}, {_id:1, class_name:1})
+        .then(function(bods) {
+            
+            //Fix references to dupObj to point to origObj
+            var promiseList = [];
+            
+            _.forEach(bods, function(bod) {
+                var tdMap = db[bod._id]._bo_meta_data.type_desc_map;
+                _.forEach(tdMap, function(td, fieldName) {
+                   if(td.type === 'reference' && td.ref_class === boClass) {
+                       var refQuery = {};
+                       refQuery[fieldName+'._id'] = dupId;
+                       var p = db[bod._id].find(refQuery).then(function(referencingObjects) {
+                           
+                           var pChain = Q(true);
+                           
+                           for(var i=0; i < referencingObjects.length; i++) {
+                               var refObj = referencingObjects[i];
+                               console.log('DUP FIXER: Updating reference from %s.%s[%s] to %s.%s', bod.class_name, refObj._id, fieldName, boClass, origId);
+                               refObj[fieldName] = {_id:origId};
+                            //   pChain = pChain.then(refObj.save.bind(refObj, {}));
+                            pChain = pChain.then(saveObj.bind(null, refObj));
+                               refCount++;
+                           }
+                           
+                        
+                           return pChain;
+                       });
+                       promiseList.push(p);
+                   } 
+                });
+            });
+            
+            
+            return Q.all(promiseList).then(function() {
+                return db[boClass].findOne({_id:dupId}).exec();
+            });
+            
+        })
+        .then(function(dupObj) {
+            return dupObj.remove();
         })
         .then(function() {
             return refCount;
